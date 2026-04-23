@@ -696,9 +696,9 @@ export default function VisitorDetailPage() {
   }
 
   /**
-   * Dry-run "Send via Gong Engage" — never actually pushes to Gong. Persists a
-   * marker on the OutreachMessage so the demo can show the SF activity sync
-   * path without sending real email to prospects.
+   * "Send via Gong Engage" — the backend picks simulated vs live based on the
+   * `gong_live_send_enabled` AppSetting flag. Response includes `simulated:
+   * true|false` so we can tailor the confirmation message accordingly.
    */
   async function sendViaGongSim(messageId: string) {
     if (!visitor) return;
@@ -709,7 +709,7 @@ export default function VisitorDetailPage() {
         { method: "POST" },
       );
       if (!res.ok) {
-        let msg = `Simulated send failed (${res.status})`;
+        let msg = `Send failed (${res.status})`;
         try {
           const body = await res.json();
           if (body?.error) msg = body.error;
@@ -718,14 +718,23 @@ export default function VisitorDetailPage() {
         }
         alert(msg);
       } else {
-        alert(
-          "Simulated send recorded. In production this would push the prospect into the configured Gong Engage Flow and sync back to Salesforce.",
-        );
+        const body = await res.json().catch(() => ({}));
+        if (body?.simulated === false) {
+          alert(
+            `Live send OK — prospect added to Gong Flow${
+              body.flowName ? ` "${body.flowName}"` : ""
+            }${body.flowAssignmentId ? ` (assignment ${body.flowAssignmentId})` : ""}.`,
+          );
+        } else {
+          alert(
+            "Simulated send recorded. Toggle 'Gong Engage — Live Send' in Settings to make this a real push.",
+          );
+        }
       }
       await fetchVisitor();
     } catch (error) {
-      console.error("Simulated send failed:", error);
-      alert("Simulated send failed. Check the browser console.");
+      console.error("Gong send failed:", error);
+      alert("Gong send failed. Check the browser console.");
     } finally {
       setActionLoading(null);
     }
@@ -740,7 +749,7 @@ export default function VisitorDetailPage() {
           ? `/api/visitors/${visitor.id}/score`
           : action === "outreach"
             ? `/api/visitors/${visitor.id}/outreach`
-            : `/api/visitors/${visitor.id}/score`;
+            : `/api/visitors/${visitor.id}/sync-sf`;
       const res = await fetch(endpoint, { method: "POST" });
       if (!res.ok) {
         // Surface the backend error so the user isn't left staring at a

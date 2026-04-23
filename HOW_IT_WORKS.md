@@ -148,10 +148,12 @@ The generated email shows up in the app with three buttons:
 
 - **Copy Subject** / **Copy Body** — the SDR copies into their own tool
   (Gong Engage, Outreach, Apollo, whatever)
-- **Send via Gong Engage (sim)** — *simulated*. It records that we would
-  have pushed this into our Gong Flow but doesn't actually send a real
-  email. Flipping this to a live send is a single config change, but we
-  keep it off until Legal signs off.
+- **Send via Gong Engage** — defaults to *simulated*. It records that we
+  would have pushed this into our Gong Flow but doesn't actually send a
+  real email. To make it real, flip **Gong Engage — Live Send** ON in
+  Settings and set a Default Flow ID. When live, clicking the button
+  POSTs the prospect to `/v2/flows/{id}/assignees` in Gong — a genuine
+  push into the configured Flow. Default is OFF so demos stay safe.
 - **Sync to SF** — creates or updates the Lead in Salesforce with the score
   + the last touchpoint.
 

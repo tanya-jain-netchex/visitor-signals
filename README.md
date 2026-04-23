@@ -14,7 +14,7 @@ Built as an internal demo for the Netchex GTM team.
 4. **Qualifies** into Tier 1 / Tier 2 / Tier 3 so SDRs know where to start.
 5. **Resolves** each visitor to an existing Salesforce Lead/Contact via Gong's CRM mapping (on-demand) — shows the SF link + count of prior Gong calls/emails.
 6. **Generates** a personalized outbound email through the configured LLM provider using a prompt template tuned to real Netchex SDR voice (peer-operator tone, short sentences, industry social proof, question CTAs).
-7. **Ships** the email. Copy to clipboard, simulate a push into a Gong Engage Flow, or sync as a new Lead / Task to Salesforce.
+7. **Ships** the email. Copy to clipboard, push into a Gong Engage Flow (live or simulated, gated by a feature flag), or sync as a new Lead / Task to Salesforce.
 
 See [`DEMO.md`](./DEMO.md) for the walkthrough we use when showing this to stakeholders.
 
@@ -146,7 +146,8 @@ Everything is in **Settings** (`/settings` after login):
 | **Apify** | Fallback LinkedIn profile scraper. Only an API token is needed — actor is hardcoded (`harvestapi~linkedin-profile-scraper`). |
 | **LLM Provider** | Pick `openai` / `anthropic` / `gemini`, paste a key. Gemini 2.5 Flash is the default in the demo — cheapest, fastest, good enough. |
 | **Salesforce** | Instance URL + Connected App Client ID/Secret + Refresh Token. Refresh-token OAuth flow — see Salesforce Setup → App Manager → New Connected App. |
-| **Gong Engage** | Base URL (`https://us-xxxxx.api.gong.io`) + Access Key + Access Key Secret + optional default Flow ID. Used read-only for CRM dedup + prior-activity counts. The "Send via Gong Engage" button is intentionally simulated — no real sends. |
+| **Gong Engage** | Base URL (`https://us-xxxxx.api.gong.io`) + Access Key + Access Key Secret + optional default Flow ID. Reads (CRM mapping, prior calls/emails, last touchpoint) are always live. |
+| **Gong Engage — Live Send** | Feature flag. OFF by default → the "Send via Gong Engage" button records a simulated marker only. ON → performs a real `POST /v2/flows/{flowId}/assignees` to add the prospect to the configured Gong Flow. Requires a Default Flow ID set in the Gong Engage section. |
 | **ICP Scoring Rules** | Target industries, buyer-persona titles, disqualifier domains, and the qualification threshold (default 50). |
 | **Outreach Email Prompt** | The exact prompt sent to the LLM. Ships with a tone profile derived from real Netchex SDR emails (peer-operator voice, 85–95 word bodies, industry social proof). |
 

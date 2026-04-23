@@ -29,6 +29,18 @@ const REQUIRED_KEYS = [
   "gong_enabled",
 ] as const;
 
+/**
+ * Feature flag — when this AppSetting is present AND .enabled=true, the
+ * "Send via Gong Engage" button performs a REAL Engage send instead of the
+ * default simulation. Off by default so the demo is safe. Toggle in Settings.
+ */
+export async function isLiveSendEnabled(): Promise<boolean> {
+  const row = await prisma.appSetting.findUnique({
+    where: { key: "gong_live_send_enabled" },
+  });
+  return Boolean(row?.enabled);
+}
+
 export async function getGongConfig(): Promise<GongConfig | null> {
   const settings = await prisma.appSetting.findMany({
     where: { key: { in: [...REQUIRED_KEYS] } },
@@ -299,10 +311,96 @@ export async function sendViaGongSimulated(args: {
   return { simulated: true, sentAt };
 }
 
+// ---------- LIVE Engage send ----------
+
+/**
+ * Real Gong Engage send. Adds a prospect to a Gong Flow by POSTing to
+ * `/v2/flows/{flowId}/assignees` with the prospect's email and CRM linkage.
+ *
+ * Gated: only invoked when `gong_live_send_enabled` is toggled ON in Settings.
+ * Default is OFF → the simulated path runs instead.
+ *
+ * Flow-assignees endpoint shape (Gong public API v2):
+ *   POST /v2/flows/{flowId}/assignees
+ *   { "contactReferences": [{ "emailAddress": "...", "firstName": "...", ... }] }
+ *
+ * Gong responds 200/201 with an array of flowAssignmentIds. We return the first
+ * one and surface any non-2xx error via the gongFetch throw.
+ */
+export async function sendViaGongLive(args: {
+  visitorId: string;
+  flowId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  subject: string;
+  body: string;
+}): Promise<{ simulated: false; sentAt: Date; flowAssignmentId: string | null }> {
+  const config = await getGongConfig();
+  if (!config) {
+    throw new Error(
+      "Gong is not configured — cannot perform live Engage send.",
+    );
+  }
+  if (!args.flowId) {
+    throw new Error(
+      "No Gong Flow ID configured. Set a default Flow in Settings or pass one explicitly.",
+    );
+  }
+
+  interface AssigneesResponse {
+    flowAssignees?: Array<{
+      flowAssignmentId?: string;
+      contactReference?: { emailAddress?: string };
+    }>;
+  }
+
+  const payload = {
+    contactReferences: [
+      {
+        emailAddress: args.email,
+        firstName: args.firstName ?? undefined,
+        lastName: args.lastName ?? undefined,
+        companyName: args.companyName ?? undefined,
+      },
+    ],
+  };
+
+  const res = await gongFetch<AssigneesResponse>(
+    config,
+    `/v2/flows/${encodeURIComponent(args.flowId)}/assignees`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const sentAt = new Date();
+  const assignmentId = res.flowAssignees?.[0]?.flowAssignmentId ?? null;
+
+  // Update the corresponding OutreachMessage row so the UI reflects the real send.
+  await prisma.outreachMessage.updateMany({
+    where: { visitorId: args.visitorId, subject: args.subject },
+    data: {
+      sentVia: assignmentId
+        ? `gong-engage (live, assignment=${assignmentId})`
+        : "gong-engage (live)",
+      sentAt,
+    },
+  });
+
+  console.log(
+    `[Gong Engage/LIVE] visitor=${args.visitorId} flow=${args.flowId} assignment=${assignmentId}`,
+  );
+
+  return { simulated: false, sentAt, flowAssignmentId: assignmentId };
+}
+
 /**
  * Legacy entry point kept for compatibility with the original visitor action
- * wiring. Routes to the simulated sender — real sending is intentionally not
- * implemented.
+ * wiring. Routes to the simulated sender. For the real path use
+ * `sendViaGongLive` directly (gated by the `gong_live_send_enabled` flag).
  */
 export async function sendViaGong(
   visitorId: string,

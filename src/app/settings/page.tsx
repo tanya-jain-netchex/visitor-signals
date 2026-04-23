@@ -196,7 +196,17 @@ const sections: SectionConfig[] = [
         placeholder: "e.g. Netchex Inbound Outreach",
       },
     ],
-    note: "This demo never actually sends email through Gong — the 'Send via Gong Engage' button records a simulated-send marker on the outreach message. Read endpoints (CRM mapping, prior activity) are real and use Gong's public REST API with HTTP Basic auth.",
+    note: "Read endpoints (CRM mapping, prior call/email counts) always use Gong's public REST API with real credentials. The 'Send via Gong Engage' button defaults to SIMULATED — toggle 'Live Send' below (and set a Default Flow ID) to have it actually add the prospect to the Gong Flow via POST /v2/flows/{id}/assignees.",
+  },
+  {
+    id: "gong_live_send",
+    title: "Gong Engage — Live Send",
+    description:
+      "When ON, clicking 'Send via Gong Engage' on a generated email performs a real push to the configured Gong Flow. When OFF (default), the send is simulated: a marker is written on the outreach message but no Gong API call happens. Keep OFF for demos.",
+    enabledKey: "gong_live_send_enabled",
+    icon: Zap,
+    fields: [],
+    note: "Live Send requires: (1) Gong credentials saved + enabled above, and (2) a Default Flow ID set in the Gong Engage card. Without either, the button stays in simulated mode.",
   },
 ];
 
