@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: netchex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: netchex
+      POSTGRES_PASSWORD: netchex_dev
+      POSTGRES_DB: netchex_leads
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netchex -d netchex_leads"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Uncomment below to run the full app via Docker
+  # app:
+  #   build: .
+  #   container_name: netchex-app
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgresql://netchex:netchex_dev@postgres:5432/netchex_leads
+  #     APP_PASSWORD: ${APP_PASSWORD:-demo123}
+  #     ENCRYPTION_KEY: ${ENCRYPTION_KEY:-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2}
+
+volumes:
+  postgres_data:

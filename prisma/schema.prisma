@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum VisitorStatus {
+  NEW
+  ENRICHING
+  ENRICHED
+  SCORING
+  QUALIFIED
+  DISQUALIFIED
+  SYNCED_TO_SF
+  ERROR
+}
+
+model Visitor {
+  id                 String        @id @default(cuid())
+  email              String?
+  firstName          String?
+  lastName           String?
+  title              String?
+  companyName        String?
+  linkedinUrl        String?
+  website            String?
+  industry           String?
+  employeeCount      String?       // Range string from RB2B: "51-200", "1001-5000"
+  estimatedRevenue   String?       // Range string: "$5M - $10M", "Above $50M"
+  city               String?
+  state              String?
+  zipcode            String?
+  profileType        String        @default("Person") // "Person" or "Company"
+  tags               Json          @default("[]")     // From RB2B: ["Hot lead"]
+  filterMatches      Json          @default("[]")     // From RB2B: ["ICP"]
+  allTimePageViews   Int           @default(1)
+  isNewProfile       Boolean       @default(true)
+  firstSeenAt        DateTime?
+  lastSeenAt         DateTime?
+  status             VisitorStatus @default(NEW)
+  source             String        @default("webhook") // "webhook" | "csv"
+  rawPayload         Json?
+  errorMessage       String?
+
+  // Gong/Salesforce linkage (populated on-demand via Gong CRM entities API).
+  // Cached here so the visitor detail page can render a "View in Salesforce"
+  // link and prior-touchpoint chips without re-hitting Gong every render.
+  sfObjectType       String?       // "Lead" | "Contact" | "Account"
+  sfId               String?       // 18-char SF ID
+  sfInstanceUrl      String?       // e.g. https://netchex.my.salesforce.com
+  priorCallCount     Int?          // from Gong /v2/calls/extensive by email
+  priorEmailCount    Int?          // from Gong /v2/data-privacy references
+  lastTouchpointAt   DateTime?     // most recent call/email timestamp
+  gongCheckedAt      DateTime?     // last time we refreshed the cache
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  pageVisits         PageVisit[]
+  enrichment         EnrichmentResult?
+  icpScore           IcpScore?
+  sfSyncLogs         SfSyncLog[]
+  outreachMessages   OutreachMessage[]
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+  @@index([profileType])
+}
+
+model PageVisit {
+  id        String   @id @default(cuid())
+  visitorId String
+  url       String
+  referrer  String?
+  seenAt    DateTime @default(now())
+  visitor   Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+}
+
+model EnrichmentResult {
+  id          String   @id @default(cuid())
+  visitorId   String   @unique
+  source      String   // "clay" | "apify"
+  profileData Json     // Full enrichment response
+  companyData Json?    // Company enrichment data
+  enrichedAt  DateTime @default(now())
+  visitor     Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+}
+
+model IcpScore {
+  id               String   @id @default(cuid())
+  visitorId        String   @unique
+  totalScore       Float
+  isQualified      Boolean
+  tier             String   // "tier1" | "tier2" | "tier3"
+  disqualifyReason String?
+  scoreBreakdown   Json     // { firmographics: 30, intent: 20, persona: 15, capacity: 8 }
+  scoredAt         DateTime @default(now())
+  visitor          Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+}
+
+model SfSyncLog {
+  id         String   @id @default(cuid())
+  visitorId  String
+  action     String   // "create_lead" | "update_activity" | "skip"
+  sfObjectId String?
+  status     String   // "success" | "error"
+  errorMsg   String?
+  syncedAt   DateTime @default(now())
+  visitor    Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+}
+
+model OutreachMessage {
+  id        String    @id @default(cuid())
+  visitorId String
+  subject   String
+  body      String    @db.Text
+  sentVia   String?   // "gong" | "clipboard" | null
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  visitor   Visitor   @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   // encrypted
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+model IcpConfig {
+  id             String   @id @default(cuid())
+  name           String   @default("default")
+  scoreThreshold Float    @default(60)
+  rules          Json     // Scoring rules config
+  disqualifiers  Json     // { freeDomains: [...], competitors: [...], internal: [...] }
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
